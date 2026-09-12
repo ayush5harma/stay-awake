@@ -21,7 +21,10 @@ the moment you turn it off again:
    AppleScript's `do shell script ... with administrator privileges`, which
    pops the standard macOS password dialog. See
    ["The optional password-free sudoers rule"](#the-optional-password-free-sudoers-rule)
-   to make this silent.
+   to make this silent. This flag lives in the system's own power settings,
+   not in the app: it survives a reboot, a logout, and the app being killed
+   or quit unexpectedly, and only the cup, the menu's Quit, or running
+   `sudo pmset -a disablesleep 0` yourself clears it.
 2. **`caffeinate -dimsu -w <the app's own pid>`** — prevents idle, display,
    disk and system sleep as a belt-and-braces measure, and is tied to the
    app's process by `-w`, so if the app is ever killed or replaced (a
@@ -131,13 +134,15 @@ app keeps working, just back to the password dialog.
 ./install.sh --uninstall
 ```
 
-This unregisters the LaunchAgent and removes `Stay Awake.app` from
-`/Applications` (or wherever `APP_DIR` pointed it at). It does **not**
-remove the sudoers rule (if you installed one) — do that with
-`sudo rm /etc/sudoers.d/stay-awake` — and if sleep is still disabled
-afterwards (`pmset -g | grep SleepDisabled`), turn it back on with
-`sudo pmset -a disablesleep 0`. `install.sh --uninstall` prints both of
-these reminders.
+Since `launchctl bootout` kills the app without going through its Quit
+menu item, this checks the actual system flag first
+(`pmset -g`'s `SleepDisabled`) and, if sleep is currently disabled, clears
+it itself (`sudo pmset -a disablesleep 0` — this may prompt for a
+password) before anything is removed: once the app is gone, it is the
+only thing that could have turned this back off. It then unregisters the
+LaunchAgent and removes `Stay Awake.app` from `/Applications` (or
+wherever `APP_DIR` pointed it at). It does **not** remove the sudoers rule
+(if you installed one) — do that with `sudo rm /etc/sudoers.d/stay-awake`.
 
 ## Troubleshooting
 

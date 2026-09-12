@@ -7,13 +7,14 @@
   before the app is built (or before a later rebuild lands) does not spin.
 
   install.sh renders this template by replacing __HOME__ with the installing
-  user's home directory (a plist string is not a shell — it cannot expand
-  $HOME or ~ itself) and copies the result to
+  user's home directory and __APP__ with the actual install path ($APP_DIR;
+  a plist string is not a shell — it cannot expand $HOME, ~ or a variable
+  itself) and copies the result to
   ~/Library/LaunchAgents/com.ayushsharma.stay-awake.plist.
 
   Rename the Label (and the matching string in build.sh's $AGENT and in
-  main.swift's launchctl kick) if you want a different reverse-DNS identity;
-  see README.md, "Changing the bundle id and label".
+  install.sh's LABEL) if you want a different reverse-DNS identity; see
+  README.md, "Changing the bundle id and label".
 -->
 <plist version="1.0">
 <dict>
@@ -23,7 +24,7 @@
   <array>
     <string>/bin/bash</string>
     <string>-c</string>
-    <string>app="/Applications/Stay Awake.app/Contents/MacOS/StayAwake"; while [ ! -x "$app" ]; do sleep 300; done; exec "$app"</string>
+    <string>app="__APP__/Contents/MacOS/StayAwake"; while [ ! -x "$app" ]; do sleep 300; done; exec "$app"</string>
   </array>
   <key>RunAtLoad</key>
   <true/>

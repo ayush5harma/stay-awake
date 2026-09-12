@@ -150,20 +150,27 @@ rm -rf "$ICON_WORK"
 # icns or the car afterwards would invalidate it.
 codesign --force --sign - "$APP_DIR" >/dev/null 2>&1 || true
 /usr/bin/xattr -cr "$APP_DIR" 2>/dev/null || true
-# Bump the bundle's mtime and re-index it. LaunchServices caches an app's icon
-# against the bundle, and a Finder window already showing the old (or blank)
-# one keeps showing it until something invalidates that cache; these two are
-# what does it without asking anyone to killall Finder.
-touch "$APP_DIR"
-/usr/bin/mdimport "$APP_DIR" >/dev/null 2>&1 || true
 say "built $APP_DIR"
 
-# The launchd agent (KeepAlive) is still running the OLD binary; kick it so the
-# menu bar shows this build now. Guarded twice: a scratch build (OUT_DIR not
-# the default) must not touch the installed app, and no agent yet (a fresh
-# machine, a first install) is not an error.
-if [ "$OUT_DIR" = "$DEFAULT_OUT" ] \
-   && launchctl print "gui/$(id -u)/$AGENT" >/dev/null 2>&1; then
-  launchctl kickstart -k "gui/$(id -u)/$AGENT" 2>/dev/null && say "restarted $AGENT" || true
+# Everything below only matters for the real installed copy, so it shares the
+# scratch-build guard with the kickstart: mdimport would index a SECOND path
+# under this same bundle's CFBundleIdentifier, which pollutes Spotlight and
+# LaunchServices lookups for the id with an ephemeral scratch location that
+# may not even exist a moment later, and a scratch build must not restart the
+# installed app's agent either.
+if [ "$OUT_DIR" = "$DEFAULT_OUT" ]; then
+  # Bump the bundle's mtime and re-index it. LaunchServices caches an app's
+  # icon against the bundle, and a Finder window already showing the old (or
+  # blank) one keeps showing it until something invalidates that cache; these
+  # two are what does it without asking anyone to killall Finder.
+  touch "$APP_DIR"
+  /usr/bin/mdimport "$APP_DIR" >/dev/null 2>&1 || true
+
+  # The launchd agent (KeepAlive) is still running the OLD binary; kick it so
+  # the menu bar shows this build now. Guarded: no agent yet (a fresh
+  # machine, a first install) is not an error.
+  if launchctl print "gui/$(id -u)/$AGENT" >/dev/null 2>&1; then
+    launchctl kickstart -k "gui/$(id -u)/$AGENT" 2>/dev/null && say "restarted $AGENT" || true
+  fi
 fi
 exit 0

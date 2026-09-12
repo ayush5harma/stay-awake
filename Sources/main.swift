@@ -4,8 +4,8 @@
 // display through a KVM switch, each in clamshell mode with the lid closed;
 // the host left behind sees "lid closed, no display", sleeps, and kills
 // whatever was running while the lock screen engages. ONE CLICK on the cup
-// turns this on (2026-09-07; a menu with a toggle item before), and the host
-// then stays up AND unlocked through lid, KVM and idle by three means:
+// turns this on, and the host then stays up AND unlocked through lid, KVM
+// and idle by three means:
 //   • `pmset -a disablesleep 1` -- the only thing that stops clamshell sleep
 //     itself. Needs root, and sudoers/stay-awake.example in this repo is a
 //     NOPASSWD rule for exactly these two command lines, so `sudo -n` runs

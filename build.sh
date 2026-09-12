@@ -8,13 +8,17 @@
 #
 # Override the install location with APP_DIR (the app's parent directory,
 # e.g. APP_DIR=/tmp/scratch for a throwaway build) and the bundle/app name
-# with APP_NAME.
+# with APP_NAME. When the output directory is not the default, the script
+# does NOT restart the launchd agent — a scratch build must not take over
+# the menu bar out from under the installed app.
 
 set -uo pipefail
 
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/Sources" && pwd)"
 APP_NAME="${APP_NAME:-Stay Awake}"
-APP_DIR="${APP_DIR:-/Applications}/${APP_NAME}.app"
+DEFAULT_OUT="/Applications"
+OUT_DIR="${APP_DIR:-$DEFAULT_OUT}"
+APP_DIR="$OUT_DIR/${APP_NAME}.app"
 BIN="$APP_DIR/Contents/MacOS/StayAwake"
 AGENT="com.ayushsharma.stay-awake"
 FORCE=0
@@ -155,8 +159,11 @@ touch "$APP_DIR"
 say "built $APP_DIR"
 
 # The launchd agent (KeepAlive) is still running the OLD binary; kick it so the
-# menu bar shows this build now. Guarded: no agent yet is not an error.
-if launchctl print "gui/$(id -u)/$AGENT" >/dev/null 2>&1; then
+# menu bar shows this build now. Guarded twice: a scratch build (OUT_DIR not
+# the default) must not touch the installed app, and no agent yet (a fresh
+# machine, a first install) is not an error.
+if [ "$OUT_DIR" = "$DEFAULT_OUT" ] \
+   && launchctl print "gui/$(id -u)/$AGENT" >/dev/null 2>&1; then
   launchctl kickstart -k "gui/$(id -u)/$AGENT" 2>/dev/null && say "restarted $AGENT" || true
 fi
 exit 0

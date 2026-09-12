@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent for Stay Awake: KeepAlive so the app comes back if it is ever
+  killed, RunAtLoad so it is up again right after login. The ProgramArguments
+  wait for the bundle to exist before exec'ing it, so installing the agent
+  before the app is built (or before a later rebuild lands) does not spin.
+
+  install.sh renders this template by replacing __HOME__ with the installing
+  user's home directory (a plist string is not a shell — it cannot expand
+  $HOME or ~ itself) and copies the result to
+  ~/Library/LaunchAgents/com.ayushsharma.stay-awake.plist.
+
+  Rename the Label (and the matching string in build.sh's $AGENT and in
+  main.swift's launchctl kick) if you want a different reverse-DNS identity;
+  see README.md, "Changing the bundle id and label".
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.ayushsharma.stay-awake</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>app="/Applications/Stay Awake.app/Contents/MacOS/StayAwake"; while [ ! -x "$app" ]; do sleep 300; done; exec "$app"</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>StandardOutPath</key>
+  <string>/dev/null</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/stay-awake.log</string>
+</dict>
+</plist>

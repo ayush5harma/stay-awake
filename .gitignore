@@ -1,0 +1,13 @@
+# macOS noise
+.DS_Store
+
+# Build outputs. build.sh installs to /Applications by default; APP_DIR=
+# overrides the destination (e.g. for a local test build), so ignore the
+# bundle shape wherever it lands inside this tree.
+*.app/
+build/
+Sources/.build.log
+
+# Anything a manual `install.sh --uninstall` or a stray sudoers edit might
+# leave as a scratch file beside the example
+*.sudoers

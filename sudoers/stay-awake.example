@@ -1,0 +1,26 @@
+# Stay Awake — optional password-free sudo rule.
+#
+# `pmset -a disablesleep` is the only mechanism that stops clamshell sleep,
+# and it needs root. Without this rule, every click on the menu-bar cup pops
+# an administrator-password dialog (via AppleScript's "with administrator
+# privileges"); the app still works, it is just not one click.
+#
+# sudo matches the command line VERBATIM (arguments included), so this rule
+# is password-free for exactly these two invocations and nothing else — not
+# "any pmset command", not "any command as root".
+#
+# Install (replace <username> with your macOS short username, `id -un`):
+#   1. cp sudoers/stay-awake.example /tmp/stay-awake.sudoers
+#   2. edit /tmp/stay-awake.sudoers, replacing <username>
+#   3. sudo visudo -c -f /tmp/stay-awake.sudoers      # validate syntax first
+#   4. sudo cp /tmp/stay-awake.sudoers /etc/sudoers.d/stay-awake
+#      sudo chmod 440 /etc/sudoers.d/stay-awake
+#      sudo chown root:wheel /etc/sudoers.d/stay-awake
+#   (or skip steps 1-2 and run `sudo visudo -f /etc/sudoers.d/stay-awake`
+#   directly, then paste the line below with your username substituted —
+#   visudo validates on save and sets the file's mode itself.)
+#
+# Remove it any time with: sudo rm /etc/sudoers.d/stay-awake
+# (the app falls back to the password dialog; nothing else changes).
+
+<username> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0

@@ -85,13 +85,15 @@ fi
   || { say "build produced no app (see above) — aborting"; exit 1; }
 
 mkdir -p "$HOME/Library/LaunchAgents"
-# A plist that is a symlink belongs to something else (a nix-darwin or
-# home-manager switch links agents into ~/Library/LaunchAgents from the Nix
-# store, read-only): writing over it fails as "Permission denied" and, worse,
-# would silently take an agent away from its owner. Measured 2026-09-13 on a
-# flake-managed Mac. Say so and stop; that Mac gets the app from its flake.
-if [ -L "$PLIST_DST" ]; then
-  say "$PLIST_DST is a symlink, so another tool manages this agent (a Nix flake?);"
+# A plist this script did not write belongs to something else: a nix-darwin
+# switch writes agents into ~/Library/LaunchAgents as read-only files (mode
+# 444; measured 2026-09-13 on a flake-managed Mac), home-manager links them
+# from the read-only Nix store. Writing over either fails as "Permission
+# denied" after the build and, made writable, would silently take the agent
+# away from its owner. This script's own plists are 644. Say so and stop;
+# that Mac gets the app from its flake.
+if [ -e "$PLIST_DST" ] && { [ -L "$PLIST_DST" ] || [ ! -w "$PLIST_DST" ]; }; then
+  say "$PLIST_DST is read-only or a symlink, so another tool manages this agent (a Nix flake?);"
   say "not touching it. Uninstall that first, or leave Stay Awake to it."
   exit 1
 fi

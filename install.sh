@@ -85,6 +85,16 @@ fi
   || { say "build produced no app (see above) — aborting"; exit 1; }
 
 mkdir -p "$HOME/Library/LaunchAgents"
+# A plist that is a symlink belongs to something else (a nix-darwin or
+# home-manager switch links agents into ~/Library/LaunchAgents from the Nix
+# store, read-only): writing over it fails as "Permission denied" and, worse,
+# would silently take an agent away from its owner. Measured 2026-09-13 on a
+# flake-managed Mac. Say so and stop; that Mac gets the app from its flake.
+if [ -L "$PLIST_DST" ]; then
+  say "$PLIST_DST is a symlink, so another tool manages this agent (a Nix flake?);"
+  say "not touching it. Uninstall that first, or leave Stay Awake to it."
+  exit 1
+fi
 # Plain string replacement, not sed: $HOME or $APP_PATH could contain a
 # character sed's replacement text treats specially (& re-inserts the whole
 # match; the delimiter itself, whatever it is, would need escaping) and

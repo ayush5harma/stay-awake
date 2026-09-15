@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // bar to say so. Only the menu's Quit undoes it; a relaunch keeps the flag,
     // which is what makes the state survive this app.
     func applicationWillTerminate(_: Notification) {
-        if isQuittingFromMenu && isOn { setSleepDisabled(false, allowDialog: false) }
+        if isQuittingFromMenu && isOn { _ = setSleepDisabled(false, allowDialog: false) }
         stopCaffeinate()
         stopActivityTimer()
     }
@@ -85,7 +85,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // The password-free path first, the administrator dialog second. False
     // when neither set the flag, which includes the person cancelling.
-    @discardableResult
     private func setSleepDisabled(_ disabled: Bool, allowDialog: Bool = true) -> Bool {
         let value = disabled ? "1" : "0"
         if runPmsetWithSudo(value) { lastError = nil; return true }

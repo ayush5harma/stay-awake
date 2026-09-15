@@ -30,8 +30,9 @@ FORCE=0
 
 say() { printf '  %s\n' "$*"; }
 
-# The last <n> lines of <log>, indented under the message that points at it.
-show_log_tail() { tail -"$2" "$1" | sed 's/^/      /'; }
+# show_log_tail <log> <lines>: the tail of a log, indented under the message
+# that points at it.
+show_log_tail() { tail -n "$2" "$1" | sed 's/^/      /'; }
 
 # /usr/bin/swiftc is a shim that exists on every Mac and fails until the Xcode
 # Command Line Tools are installed, so the check has to run it rather than

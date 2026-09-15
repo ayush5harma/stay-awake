@@ -9,8 +9,10 @@ Click the cup in the menu bar to turn it on, click it again to turn it off.
 
 ## Install
 
-You need macOS 14 or later and the Xcode Command Line Tools
-(`xcode-select --install`), which provide the Swift compiler.
+You need macOS 14 or later, and the Xcode Command Line Tools
+(`xcode-select --install`), which provide the Swift compiler. It also runs on
+macOS 13, with a plain cup in place of the steaming one; see
+[macOS versions and the icons](#macos-versions-and-the-icons).
 
 ```sh
 git clone https://github.com/ayush5harma/stay-awake.git
@@ -122,14 +124,16 @@ bash build.sh --force                # rebuild even when nothing changed
 APP_DIR=/tmp/scratch bash build.sh   # build /tmp/scratch/Stay Awake.app instead
 ```
 
-It skips the work when the app is already built and no file under `Sources/`
-is newer than it, so re-running it costs a handful of `find` and `stat` calls.
-Changes to `build.sh` itself are not part of that check; use `--force` after
-editing it. Compiler errors go to `Sources/.build.log`.
+It skips the work when the app is already built, still has its icon, and no
+file under `Sources/` is newer than it, so re-running it costs a handful of
+`find` and `stat` calls. Changes to `build.sh` itself are not part of that
+check; use `--force` after editing it. Compiler errors go to
+`Sources/.build.log`.
 
-A build into `/Applications` restarts the running app through its LaunchAgent,
-if the agent is loaded, so the new build is the one in the menu bar. A build
-anywhere else leaves the installed app alone.
+`build.sh` never registers the LaunchAgent; only `install.sh` does. A build
+into `/Applications` does restart the running app through that agent, if the
+agent is loaded, so the new build is the one in the menu bar. A build anywhere
+else leaves the installed app alone.
 
 ## Licence
 

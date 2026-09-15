@@ -3,7 +3,8 @@
 // regenerates, while a hundred lines of CoreGraphics edits like source.
 // build.sh compiles and runs this, then throws the output away.
 //
-// Usage: iconrender <output-dir>
+// Usage: icon <output-dir>   (build.sh compiles this file into a binary it
+// calls `iconrender` and runs with a scratch directory)
 // Writes, into <output-dir>:
 //   AppIcon.icon/      an Icon Composer package (icon.json + Assets/), the
 //                      only format that carries light and dark appearance

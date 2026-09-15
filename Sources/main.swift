@@ -35,31 +35,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let menu = NSMenu()
     private var caffeinate: Process?
     private var activity: Timer?
-    private var poller: Timer?
     private var since: Date?
     private var on = false
     private var quitting = false   // set by the menu's Quit; a KeepAlive relaunch or the single-instance sweep is not a quit
     private var lastError: String?
 
     func applicationDidFinishLaunching(_: Notification) {
-        // SINGLE INSTANCE: a second copy would put a second cup in the bar.
-        let me = ProcessInfo.processInfo.processIdentifier
-        for a in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
-        where a.processIdentifier != me { a.terminate() }
-
-        item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        // No menu on the item: with one set, every click opens it. The button
-        // gets both mouse buttons and the handler tells them apart.
-        if let b = item.button {
-            b.target = self
-            b.action = #selector(clicked)
-            b.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        }
+        terminateOtherCopies()
+        makeStatusItem()
         render()
         poll()
-        // .common mode, or the timer freezes exactly while the menu is open.
-        let t = Timer(timeInterval: 30, repeats: true) { [weak self] _ in self?.poll() }
-        RunLoop.main.add(t, forMode: .common); poller = t
+        repeatingTimer(every: 30) { [weak self] in self?.poll() }
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in self?.poll() }
@@ -70,88 +56,96 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // sleeping with no cup left in the bar to say so. A relaunch (KeepAlive, a
     // rebuild) keeps the flag, so the state survives the app.
     func applicationWillTerminate(_: Notification) {
-        if quitting && on { _ = setSleepDisabled(false, dialog: false) }
+        if quitting && on { setSleepDisabled(false, dialog: false) }
         stopCaffeinate(); stopActivity()
+    }
+
+    // MARK: launch
+
+    // SINGLE INSTANCE: a second copy would put a second cup in the bar.
+    private func terminateOtherCopies() {
+        let me = ProcessInfo.processInfo.processIdentifier
+        for a in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        where a.processIdentifier != me { a.terminate() }
+    }
+
+    // No menu on the item: with one set, every click opens it. The button
+    // gets both mouse buttons and the handler tells them apart.
+    private func makeStatusItem() {
+        item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        guard let b = item.button else { return }
+        b.target = self
+        b.action = #selector(clicked)
+        b.sendAction(on: [.leftMouseUp, .rightMouseUp])
     }
 
     // MARK: pmset
 
-    private func readSleepDisabled() -> Bool {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/pmset"); p.arguments = ["-g"]
-        let pipe = Pipe(); p.standardOutput = pipe; p.standardError = FileHandle.nullDevice
-        guard (try? p.run()) != nil else { return false }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
-        for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
-            let parts = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
-            if parts.count >= 2, parts[0] == "SleepDisabled" { return parts[1] == "1" }
-        }
-        return false
-    }
-
-    // `sudo -n` first: the NOPASSWD rule in sudoers/stay-awake.example (once
-    // installed) covers exactly these two command lines and nothing else, and
-    // -n makes a missing rule a refusal instead of a hang on a password
-    // nobody can type. The administrator dialog is the fallback. False when
-    // neither happened -- which includes the person cancelling the dialog
-    // (AppleScript -128, not an error).
+    // `sudo -n` first, the administrator dialog second. False when neither
+    // happened -- which includes the person cancelling the dialog.
+    @discardableResult
     private func setSleepDisabled(_ flag: Bool, dialog: Bool = true) -> Bool {
         let arg = flag ? "1" : "0"
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-        p.arguments = ["-n", "/usr/bin/pmset", "-a", "disablesleep", arg]
+        if runPmsetWithSudo(arg) { lastError = nil; return true }
+        return dialog && runPmsetWithAdminDialog(arg)
+    }
+
+    // The NOPASSWD rule in sudoers/stay-awake.example (once installed) covers
+    // exactly these two command lines and nothing else, and -n makes a missing
+    // rule a refusal instead of a hang on a password nobody can type.
+    private func runPmsetWithSudo(_ arg: String) -> Bool {
+        let p = makeProcess("/usr/bin/sudo", ["-n", "/usr/bin/pmset", "-a", "disablesleep", arg])
         p.standardInput = FileHandle.nullDevice
-        p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
-        if (try? p.run()) != nil {
-            p.waitUntilExit()
-            if p.terminationStatus == 0 { lastError = nil; return true }
-        }
-        if !dialog { return false }
+        guard (try? p.run()) != nil else { return false }
+        p.waitUntilExit()
+        return p.terminationStatus == 0
+    }
+
+    // AppleScript reports a cancelled prompt as error -128: the person chose
+    // not to, which is not an error to report in the menu.
+    private func runPmsetWithAdminDialog(_ arg: String) -> Bool {
         let src = "do shell script \"/usr/bin/pmset -a disablesleep \(arg)\" with administrator privileges"
         var err: NSDictionary?
         NSAppleScript(source: src)?.executeAndReturnError(&err)
-        if let e = err {
-            let code = (e[NSAppleScript.errorNumber] as? Int) ?? 0
-            lastError = code == -128 ? nil : ((e[NSAppleScript.errorMessage] as? String) ?? "pmset failed")
-            return false
-        }
-        lastError = nil
-        return true
+        guard let e = err else { lastError = nil; return true }
+        let code = (e[NSAppleScript.errorNumber] as? Int) ?? 0
+        lastError = code == -128 ? nil : ((e[NSAppleScript.errorMessage] as? String) ?? "pmset failed")
+        return false
     }
 
     // MARK: caffeinate + user activity
 
     private func startCaffeinate() {
         guard caffeinate == nil else { return }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
-        p.arguments = ["-dimsu", "-w", String(ProcessInfo.processInfo.processIdentifier)]
-        p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
+        let p = makeProcess("/usr/bin/caffeinate",
+                            ["-dimsu", "-w", String(ProcessInfo.processInfo.processIdentifier)])
+        // If caffeinate dies on its own, forget it; the next poll starts a new one.
         p.terminationHandler = { [weak self] _ in
-            DispatchQueue.main.async { self?.caffeinate = nil; self?.render() }
+            DispatchQueue.main.async { self?.caffeinate = nil }
         }
         do { try p.run(); caffeinate = p } catch { lastError = "caffeinate: \(error.localizedDescription)" }
     }
 
     private func stopCaffeinate() {
+        // Drop the handler first, or its late hop to the main queue could clear
+        // the reference to a caffeinate started after this one.
         caffeinate?.terminationHandler = nil
         caffeinate?.terminate()
         caffeinate = nil
     }
 
+    private func startActivity() {
+        guard activity == nil else { return }
+        declareActivity()
+        activity = repeatingTimer(every: 60) { [weak self] in self?.declareActivity() }
+    }
+
+    private func stopActivity() { activity?.invalidate(); activity = nil }
+
     private func declareActivity() {
         var id: IOPMAssertionID = 0
         IOPMAssertionDeclareUserActivity("Stay Awake" as CFString, kIOPMUserActiveLocal, &id)
     }
-
-    private func startActivity() {
-        guard activity == nil else { return }
-        declareActivity()
-        let t = Timer(timeInterval: 60, repeats: true) { [weak self] _ in self?.declareActivity() }
-        RunLoop.main.add(t, forMode: .common); activity = t
-    }
-
-    private func stopActivity() { activity?.invalidate(); activity = nil }
 
     // MARK: state
 
@@ -164,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Off the main thread: pmset is a process spawn and this runs every tick.
     private func poll() {
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let flag = self?.readSleepDisabled() ?? false
+            let flag = readSleepDisabled()
             DispatchQueue.main.async { self?.apply(flag) }
         }
     }
@@ -216,7 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func build(_ m: NSMenu) {
         m.removeAllItems()
-        header(m, "Stay Awake")
+        label(m, "Stay Awake", font: .systemFont(ofSize: 12.5, weight: .semibold), color: .labelColor)
         if on {
             let age = since.map { " for \(ageText(Int(Date().timeIntervalSince($0))))" } ?? ""
             note(m, "On\(age) · sleep disabled · caffeinate \(caffeinate != nil ? "running" : "NOT running") · lock held off",
@@ -233,32 +227,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         m.addItem(q)
     }
 
-    private func header(_ m: NSMenu, _ s: String) {
-        let x = NSMenuItem(title: s, action: nil, keyEquivalent: ""); x.isEnabled = false
-        x.attributedTitle = NSAttributedString(string: s, attributes: [
-            .font: NSFont.systemFont(ofSize: 12.5, weight: .semibold),
-            .foregroundColor: NSColor.labelColor,
-        ])
-        m.addItem(x)
+    private func note(_ m: NSMenu, _ s: String, color: NSColor = .secondaryLabelColor) {
+        label(m, s, font: .systemFont(ofSize: 11.5), color: color)
     }
 
-    private func note(_ m: NSMenu, _ s: String, color: NSColor = .secondaryLabelColor) {
+    // Disabled, so it reads as menu text rather than as a command.
+    private func label(_ m: NSMenu, _ s: String, font: NSFont, color: NSColor) {
         let x = NSMenuItem(title: s, action: nil, keyEquivalent: ""); x.isEnabled = false
         x.attributedTitle = NSAttributedString(string: s, attributes: [
-            .font: NSFont.systemFont(ofSize: 11.5),
+            .font: font,
             .foregroundColor: color,
         ])
         m.addItem(x)
     }
 
-    private func ageText(_ s: Int) -> String {
-        if s < 60 { return "\(s)s" }
-        if s < 3600 { return "\(s / 60)m" }
-        if s < 86400 { return String(format: "%.1fh", Double(s) / 3600) }
-        return "\(s / 86400)d"
-    }
-
     @objc private func quit() { quitting = true; NSApp.terminate(nil) }
+}
+
+// MARK: - Helpers that hold no state
+
+// The SleepDisabled setting from `pmset -g`; false when pmset cannot be run.
+func readSleepDisabled() -> Bool {
+    let p = makeProcess("/usr/bin/pmset", ["-g"])
+    let pipe = Pipe(); p.standardOutput = pipe
+    guard (try? p.run()) != nil else { return false }
+    let data = pipe.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
+    // One setting per line, name then value: " SleepDisabled\t\t1".
+    for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
+        let parts = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
+        if parts.count >= 2, parts[0] == "SleepDisabled" { return parts[1] == "1" }
+    }
+    return false
+}
+
+// Output goes nowhere unless the caller redirects it, so a child's chatter
+// never reaches the LaunchAgent's log: without the sudoers rule, `sudo -n`
+// would write a refusal there on every click.
+func makeProcess(_ path: String, _ arguments: [String]) -> Process {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: path)
+    p.arguments = arguments
+    p.standardOutput = FileHandle.nullDevice
+    p.standardError = FileHandle.nullDevice
+    return p
+}
+
+// .common mode, or the timer freezes exactly while the menu is open.
+@discardableResult
+func repeatingTimer(every seconds: TimeInterval, _ action: @escaping () -> Void) -> Timer {
+    let t = Timer(timeInterval: seconds, repeats: true) { _ in action() }
+    RunLoop.main.add(t, forMode: .common)
+    return t
+}
+
+func ageText(_ s: Int) -> String {
+    if s < 60 { return "\(s)s" }
+    if s < 3600 { return "\(s / 60)m" }
+    if s < 86400 { return String(format: "%.1fh", Double(s) / 3600) }
+    return "\(s / 86400)d"
 }
 
 let app = NSApplication.shared

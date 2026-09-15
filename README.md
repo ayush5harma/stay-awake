@@ -1,195 +1,203 @@
 # Stay Awake
 
-A one-click menu-bar toggle that keeps a Mac from sleeping — built for the
-clamshell-mode-plus-KVM-switch case, where the machine you are not looking at
-right now sees "lid closed, no external display" and sleeps, taking down
-whatever was running on it.
+Stay Awake is a macOS menu-bar app that keeps a Mac awake and unlocked, even
+with the lid closed and no display attached. It was written for two Macs
+sharing one monitor through a KVM switch, where the Mac you switch away from
+otherwise sleeps and stops whatever it was running.
 
-Click the cup in the menu bar: it fills and starts steaming, and the Mac
-stays up and unlocked through a closed lid, a KVM switch and idle time.
-Click it again to let the Mac sleep normally.
-
-## What it does
-
-Stay Awake is a small `NSStatusItem` app (no Dock icon, no windows) with one
-piece of state: on or off. Turning it on does three things, all of which stop
-the moment you turn it off again:
-
-1. **`pmset -a disablesleep 1`** — the only setting that actually prevents
-   clamshell sleep (a closed lid with no external display attached). This
-   needs root. Without further setup, the app requests it through
-   AppleScript's `do shell script ... with administrator privileges`, which
-   pops the standard macOS password dialog. See
-   ["The optional password-free sudoers rule"](#the-optional-password-free-sudoers-rule)
-   to make this silent. This flag lives in the system's own power settings,
-   not in the app: it survives a reboot, a logout, and the app being killed
-   or quit unexpectedly, and only the cup, the menu's Quit, or running
-   `sudo pmset -a disablesleep 0` yourself clears it.
-2. **`caffeinate -dimsu -w <the app's own pid>`** — prevents idle, display,
-   disk and system sleep as a belt-and-braces measure, and is tied to the
-   app's process by `-w`, so if the app is ever killed or replaced (a
-   relaunch through the LaunchAgent's `KeepAlive`, a rebuild), the
-   `caffeinate` child dies with it instead of running forever as an orphan.
-3. **`IOPMAssertionDeclareUserActivity`, repeated every 60 seconds** — this is
-   the half `caffeinate` cannot do. `caffeinate` keeps the *display* awake,
-   but the screen saver and the login-window lock run on macOS's idle timer,
-   which only real user activity resets. Declaring user activity on a timer
-   is what keeps the Mac not just awake but *unlocked*.
-
-The menu bar icon is not just a static state indicator — clicking it reads
-`pmset -g`'s own `SleepDisabled` flag, both on a 30-second poll and right
-after every click, and treats that flag as ground truth rather than trusting
-whatever the last command reported. That means: if you set the flag from a
-terminal, the app picks it up on its next poll; if you cancel the password
-dialog, the toggle correctly reports itself as still off; and if the app
-restarts while the flag is already on (a `KeepAlive` relaunch, a rebuild), it
-re-attaches `caffeinate` and the activity timer without your having to click
-anything.
-
-Right-click (or Control/Option-click) the cup for a small menu: current
-state, how long it has been on, and Quit. Quitting turns sleep back on first
-(`pmset -a disablesleep` is a persistent system setting — quitting without
-resetting it would leave the Mac unable to sleep with no icon left to say
-so); a relaunch by the LaunchAgent is not a quit and leaves the flag alone.
-
-## Requirements
-
-- macOS 14 (Sonoma) or later. The app's `Info.plist` declares a floor of
-  macOS 13, and it will run there, but the steaming-cup icon
-  (`cup.and.heat.waves.fill`) is an SF Symbols 5 glyph introduced in macOS 14;
-  on macOS 13 it falls back to a plain filled cup with no steam.
-- Xcode Command Line Tools (`xcode-select --install`) — `build.sh` needs
-  `swiftc`. A full Xcode install additionally lets the build produce a
-  proper light/dark app icon via `actool`; without it you still get a
-  working icon, just without the dark-mode variant (see `build.sh`'s
-  comments for why).
+Click the cup in the menu bar to turn it on, click it again to turn it off.
 
 ## Install
 
-```
-git clone <this repo> stay-awake
+You need macOS 14 or later and the Xcode Command Line Tools
+(`xcode-select --install`), which provide the Swift compiler.
+
+```sh
+git clone https://github.com/ayush5harma/stay-awake.git
 cd stay-awake
 ./install.sh
 ```
 
-This builds `Stay Awake.app` (via `build.sh`) into `/Applications`, then
-registers a per-user LaunchAgent (`launchd/com.ayushsharma.stay-awake.plist.template`,
-rendered to `~/Library/LaunchAgents/com.ayushsharma.stay-awake.plist`) so the
-app starts at login and is relaunched if it is ever killed.
+That builds `Stay Awake.app` into `/Applications` and registers a LaunchAgent
+at `~/Library/LaunchAgents/com.ayushsharma.stay-awake.plist`, so the app
+starts at login and is restarted if it is ever killed. A cup appears in the
+menu bar within a few seconds.
 
-To build without installing the LaunchAgent, or to build into a different
-place (for inspection, packaging, or CI), run `build.sh` directly:
+One optional step. Without a sudoers rule, every click asks for your
+administrator password; to make clicks silent, run
 
+```sh
+sudo visudo -f /etc/sudoers.d/stay-awake
 ```
-APP_DIR=/tmp/scratch bash build.sh     # builds /tmp/scratch/Stay Awake.app
-bash build.sh --force                  # rebuild even if nothing changed
-```
 
-`build.sh` is mtime-guarded: re-running it after `install.sh` has already
-built and installed the app costs a handful of `find`/`stat` calls unless a
-source file actually changed.
-
-## The optional password-free sudoers rule
-
-By default, every time you turn Stay Awake on or off, you'll see the
-standard macOS "wants to make changes" administrator-password dialog, because
-`pmset -a disablesleep` needs root. `sudoers/stay-awake.example` removes that
-dialog for this app specifically, by granting your account passwordless
-`sudo` for exactly two command lines:
+and paste this line, replacing `<username>` with your macOS short username
+(`id -un`):
 
 ```
 <username> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0
 ```
 
-`sudo` matches a NOPASSWD rule's command **verbatim, arguments included** —
-this is not "run pmset as root with no password" or "run any command as
-root", it is exactly these two invocations and nothing else. That is the
-entire security surface this rule adds: a local process running as your user
-can flip the system's clamshell-sleep-disabled flag without a password
-prompt. It cannot read files, run other commands, or escalate further through
-this rule.
+`visudo` checks the syntax before saving and sets the file's permissions
+itself. [How it works](#how-it-works) explains exactly what the rule allows,
+and `sudoers/stay-awake.example` is the same line with a variant that
+validates a scratch copy first. Remove the rule at any time with
+`sudo rm /etc/sudoers.d/stay-awake`; the app keeps working, with the password
+dialog back.
 
-To install it:
+To uninstall:
 
-```
-sudo visudo -f /etc/sudoers.d/stay-awake
-```
-
-and paste in the line above with `<username>` replaced by your macOS short
-username (`id -un`). `visudo` validates the syntax before saving and sets the
-file's permissions itself. (`sudoers/stay-awake.example` has the same
-instructions plus a validate-before-install variant using a scratch copy and
-`visudo -c -f`.)
-
-With the rule installed, the app's `sudo -n ...` call succeeds silently;
-without it, `-n` fails immediately (not a hang) and the app falls back to the
-password dialog.
-
-Remove the rule at any time with `sudo rm /etc/sudoers.d/stay-awake` — the
-app keeps working, just back to the password dialog.
-
-## Uninstall
-
-```
+```sh
 ./install.sh --uninstall
 ```
 
-Since `launchctl bootout` kills the app without going through its Quit
-menu item, this checks the actual system flag first
-(`pmset -g`'s `SleepDisabled`) and, if sleep is currently disabled, clears
-it itself (`sudo pmset -a disablesleep 0` — this may prompt for a
-password) before anything is removed: once the app is gone, it is the
-only thing that could have turned this back off. It then unregisters the
-LaunchAgent and removes `Stay Awake.app` from `/Applications` (or
-wherever `APP_DIR` pointed it at). It does **not** remove the sudoers rule
-(if you installed one) — do that with `sudo rm /etc/sudoers.d/stay-awake`.
+That turns sleep back on if Stay Awake had it off (which may ask for your
+password), unregisters the LaunchAgent and deletes the app from
+`/Applications`, or from `APP_DIR` if you set one. It leaves the sudoers rule
+alone.
 
-## Troubleshooting
+## Use
+
+- Click the cup to turn Stay Awake on. It fills and steams, and the Mac stays
+  awake and unlocked through a closed lid, a KVM switch and idle time.
+- Click it again to turn it off and let the Mac sleep and lock normally.
+- Right-click the cup, or Control-click or Option-click it, for a menu showing
+  whether it is on, how long it has been on, the last error if there was one,
+  and Quit.
+
+Being on is a system setting rather than something the app holds, so it
+survives a reboot, a logout, and the app being killed or crashing. Four things
+turn it off: the cup, the menu's Quit, `./install.sh --uninstall`, and running
+`sudo pmset -a disablesleep 0` yourself. Quit turns sleep back on before the
+app exits, so the Mac is never left unable to sleep with no cup to say so; the
+LaunchAgent restarting the app is not a quit and leaves the setting alone.
+
+## How it works
+
+Stay Awake is a small AppKit app with one piece of state, on or off, and no
+Dock icon or windows. Turning it on does three things, because each one leaves
+a gap the next covers, and turning it off undoes all three:
+
+1. `pmset -a disablesleep 1`. The only setting that stops a Mac sleeping when
+   its lid is closed and no display is attached.
+2. `caffeinate -dimsu -w <the app's pid>`. Prevents idle, display, disk and
+   system sleep. `-w` ties it to the app's process, so it can never outlive
+   the app as an orphan.
+3. `IOPMAssertionDeclareUserActivity`, every 60 seconds. `caffeinate` keeps
+   the display awake, but the screen saver and the login-window lock run on
+   macOS's idle timer, which only real user activity resets. This is what
+   keeps the Mac unlocked rather than merely awake.
+
+The app does not trust its own memory for the state. It reads the
+`SleepDisabled` value out of `pmset -g` every 30 seconds, after every click
+and after the Mac wakes, and shows that. So a change made from a terminal
+appears here, a cancelled password dialog correctly leaves the cup off, and an
+app restarted while the setting is on re-attaches `caffeinate` and the
+activity timer by itself.
+
+### The sudoers rule, and why it is needed
+
+`pmset -a disablesleep` has to run as root. The app first tries
+`sudo -n /usr/bin/pmset -a disablesleep 1` (or `0`). `-n` tells sudo never to
+prompt, so without a rule it fails immediately rather than hanging, and the
+app falls back to the standard macOS administrator-password dialog
+(AppleScript's `do shell script ... with administrator privileges`).
+
+The rule under [Install](#install) makes exactly those two command lines
+password-free. sudo matches a NOPASSWD rule's command line verbatim,
+arguments included, so this is not "run pmset as root without a password" and
+certainly not "run anything as root": it is those two invocations and nothing
+else. What the rule adds, in full, is that a process running as you can turn
+clamshell sleep off and on without a password. It cannot read files, run other
+commands, or reach anything further through this rule.
+
+## Build from source
+
+`build.sh` compiles `Sources/main.swift` with a single `swiftc` call (there is
+no Xcode project), draws the app icon from `Sources/icon.swift`, and ad-hoc
+signs the bundle.
+
+```sh
+bash build.sh                        # build into /Applications
+bash build.sh --force                # rebuild even when nothing changed
+APP_DIR=/tmp/scratch bash build.sh   # build /tmp/scratch/Stay Awake.app instead
+```
+
+It skips the work when the app is already built and no file under `Sources/`
+is newer than it, so re-running it costs a handful of `find` and `stat` calls.
+Changes to `build.sh` itself are not part of that check; use `--force` after
+editing it. Compiler errors go to `Sources/.build.log`.
+
+A build into `/Applications` restarts the running app through its LaunchAgent,
+if the agent is loaded, so the new build is the one in the menu bar. A build
+anywhere else leaves the installed app alone.
+
+## Licence
+
+MIT; see [LICENSE](LICENSE).
+
+## Details
+
+### What is in the repo
+
+| Path | What it is |
+| --- | --- |
+| `Sources/main.swift` | the app: the menu-bar item, the three mechanisms, the menu |
+| `Sources/icon.swift` | draws the app icon at build time, so no image file is checked in |
+| `build.sh` | compiles, draws the icon, signs the bundle |
+| `install.sh` | build plus LaunchAgent registration, and `--uninstall` |
+| `launchd/com.ayushsharma.stay-awake.plist.template` | the LaunchAgent, with `__HOME__` and `__APP__` filled in by `install.sh` |
+| `sudoers/stay-awake.example` | the optional NOPASSWD rule, with installation notes |
+
+### Troubleshooting
 
 - **Every click pops a password dialog.** Expected without the sudoers rule
   above; install it to make the toggle silent.
-- **Cancelling the password dialog does something weird.** It shouldn't —
-  AppleScript reports a cancelled "administrator privileges" prompt as error
-  `-128`, which the app treats as "nothing happened," not as a failure to
-  report in its menu.
-- **The cup doesn't reflect reality.** The app re-reads `pmset -g`'s
-  `SleepDisabled` flag every 30 seconds and after every click, and treats
-  that flag — not its own last command's exit status — as ground truth. If
-  something else on the Mac has toggled `disablesleep`, expect up to a
-  30-second lag before the icon catches up.
-- **The app doesn't restart after a rebuild.** The LaunchAgent uses
-  `KeepAlive`, and `build.sh` also directly `kickstart`s the running agent
-  after a successful build, but only if the agent is already loaded (i.e.
-  `install.sh` has run at least once).
-- **Dark-mode icon looks wrong / missing.** The dark app-icon variant needs
-  `actool`, which ships with Xcode, not the standalone Command Line Tools.
-  With only the CLT installed, `build.sh` falls back to a legacy `.icns` in
-  light appearance only — cosmetic, not a functional problem.
-- **Nothing in `/var/log` or Console.app explains a failure.** Check
-  `~/Library/Logs/stay-awake.log` first (`StandardErrorPath` in the rendered
-  LaunchAgent plist).
+- **Cancelling the password dialog does something strange.** It should not:
+  AppleScript reports a cancelled administrator prompt as error `-128`, which
+  the app treats as "nothing happened" rather than as a failure to report.
+- **The cup does not match reality.** The app re-reads the `SleepDisabled`
+  flag every 30 seconds and after every click, and trusts that flag over its
+  own last command. If something else on the Mac changed `disablesleep`,
+  expect up to a 30-second lag before the cup catches up.
+- **The app did not restart after a rebuild.** The LaunchAgent uses
+  `KeepAlive`, and `build.sh` also restarts the agent itself after a
+  successful build, but only for a build into `/Applications` and only if the
+  agent is already loaded, which means `install.sh` has run at least once.
+- **`install.sh` says another tool manages this agent.** The LaunchAgent plist
+  is read-only or a symlink, which is how nix-darwin and home-manager install
+  agents. `install.sh` stops rather than taking the agent away from whatever
+  owns it.
+- **Nothing in Console.app explains a failure.** Look at
+  `~/Library/Logs/stay-awake.log` first; it is the `StandardErrorPath` in the
+  rendered LaunchAgent plist.
 
-## Changing the bundle id and label
+### macOS versions and the icons
 
-The bundle identifier (`local.ayushsharma.stay-awake` in `Sources/main.swift`
-and `build.sh`'s `Info.plist` heredoc) and the LaunchAgent label
-(`com.ayushsharma.stay-awake`, in `build.sh`'s `$AGENT`,
-`launchd/com.ayushsharma.stay-awake.plist.template`'s `Label`, and this repo's
-filenames) are left as-is by default rather than genericised, since renaming
-them is one search-and-replace and doing it for you would just be a
-different set of placeholder names to replace. To use your own:
+The app's `Info.plist` declares macOS 13 as its floor and it does run there,
+but the steaming cup (`cup.and.heat.waves.fill`) is an SF Symbols 5 glyph
+introduced in macOS 14. On macOS 13 the "on" cup is a plain filled cup with
+no steam.
 
-1. Pick a reverse-DNS id, e.g. `com.example.stay-awake`.
+The app icon is drawn at build time in two forms: an Icon Composer package
+that `actool` compiles into light and dark artwork, and a legacy `.icns` for
+older macOS. `actool` ships with Xcode, not with the standalone Command Line
+Tools, so with only the Command Line Tools installed you get a working icon
+in light appearance only. That is cosmetic; the app is the same.
+
+### Changing the bundle id and label
+
+The bundle identifier (`local.ayushsharma.stay-awake`) and the LaunchAgent
+label (`com.ayushsharma.stay-awake`) are left as they are rather than
+genericised, since renaming them is one search-and-replace and doing it for
+you would only leave a different set of placeholders to replace. To use your
+own:
+
+1. Pick a reverse-DNS id, for example `com.example.stay-awake`.
 2. Replace `local.ayushsharma.stay-awake` in `Sources/main.swift` (the
    `bundleID` constant) and in `build.sh`'s `Info.plist` heredoc
    (`CFBundleIdentifier`).
-3. Replace `com.ayushsharma.stay-awake` in `build.sh` (`AGENT=`), in
+3. Replace `com.ayushsharma.stay-awake` in `build.sh` and `install.sh` (both
+   call it `LABEL`) and in
    `launchd/com.ayushsharma.stay-awake.plist.template` (`Label`), and rename
-   that template file to match; update `install.sh`'s `LABEL=` too.
-4. If you changed the sudoers rule's username placeholder into a real rule
-   already, nothing there depends on the bundle id or label — it only names
-   `pmset`.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+   that template file to match.
+4. Nothing in the sudoers rule changes: it names `pmset`, not this app.

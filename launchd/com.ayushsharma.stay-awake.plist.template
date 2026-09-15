@@ -12,9 +12,9 @@
   itself) and copies the result to
   ~/Library/LaunchAgents/com.ayushsharma.stay-awake.plist.
 
-  Rename the Label (and the matching string in build.sh's $AGENT and in
-  install.sh's LABEL) if you want a different reverse-DNS identity; see
-  README.md, "Changing the bundle id and label".
+  Rename the Label (and the matching LABEL in build.sh and install.sh) if you
+  want a different reverse-DNS identity; see README.md, "Changing the bundle
+  id and label".
 -->
 <plist version="1.0">
 <dict>

@@ -98,6 +98,9 @@ fi
 # which `#!/usr/bin/env bash` may resolve to without Nix or Homebrew) has
 # never heard of the option and exits non-zero on the bare `shopt`, which
 # `set -e` would otherwise abort on; it predates the behaviour this undoes.
+# Keep this above EVERY ${var//...} in the file: the failure it prevents
+# passes plutil -lint, so a substitution added above it would lose the guard
+# silently.
 shopt -u patsub_replacement 2>/dev/null || true
 TEMPLATE="$(cat "$PLIST_TEMPLATE")"
 RENDERED="${TEMPLATE//__HOME__/$HOME}"

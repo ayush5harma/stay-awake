@@ -52,8 +52,8 @@ To uninstall:
 ./install.sh --uninstall
 ```
 
-That turns sleep back on if Stay Awake had it off (which may ask for your
-password), unregisters the LaunchAgent and deletes the app from
+That clears the system `SleepDisabled` flag if it is set, whatever set it
+(which may ask for your password), unregisters the LaunchAgent and deletes the app from
 `/Applications`, or from `APP_DIR` if you set one. It leaves the sudoers rule
 alone.
 

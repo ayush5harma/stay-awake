@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build "Stay Awake.app" from Sources/ and install it into /Applications.
 #
-# Usage: build.sh [--force]
+# Usage: build.sh [--force]        (there is no --help; anything else builds)
 #   --force          rebuild even when nothing under Sources/ has changed
 #   APP_DIR=<dir>    build into <dir> instead of /Applications. Such a scratch
 #                    build does not restart the installed app.

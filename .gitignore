@@ -8,6 +8,6 @@
 build/
 Sources/.build.log
 
-# Anything a manual `install.sh --uninstall` or a stray sudoers edit might
-# leave as a scratch file beside the example
+# A filled-in copy of sudoers/stay-awake.example, if one is ever made inside
+# the tree: it carries a real username
 *.sudoers

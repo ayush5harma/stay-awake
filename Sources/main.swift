@@ -231,44 +231,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func populateMenu() {
-        menu.removeAllItems()
-        addLabel("Stay Awake", font: .systemFont(ofSize: 12.5, weight: .semibold), color: .labelColor)
-        if isOn {
-            let age = onSince.map { " for \(ageText(Int(Date().timeIntervalSince($0))))" } ?? ""
-            let caffeinateState = caffeinateProcess != nil ? "running" : "NOT running"
-            addNote("On\(age) · sleep disabled · caffeinate \(caffeinateState) · lock held off",
-                    color: .systemBlue)
-            addNote("Click the cup to allow sleep again")
-        } else {
-            addNote("Off · sleeping and locking normally")
-            addNote("Click the cup to stay awake through lid, KVM and idle")
-        }
-        if let lastError { addNote(lastError, color: .systemOrange) }
-        menu.addItem(.separator())
-        let quitItem = NSMenuItem(title: "Quit Stay Awake", action: #selector(quitFromMenu), keyEquivalent: "q")
-        quitItem.target = self
-        menu.addItem(quitItem)
-    }
-
-    private func addNote(_ text: String, color: NSColor = .secondaryLabelColor) {
-        addLabel(text, font: .systemFont(ofSize: 11.5), color: color)
-    }
-
-    // Disabled, so it reads as menu text rather than as a command.
-    private func addLabel(_ text: String, font: NSFont, color: NSColor) {
-        let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        item.attributedTitle = NSAttributedString(string: text, attributes: [
-            .font: font,
-            .foregroundColor: color,
-        ])
-        menu.addItem(item)
+        buildMenuItems(into: menu, state: MenuState(
+            isOn: isOn,
+            onSince: onSince,
+            caffeinateRunning: caffeinateProcess != nil,
+            lastError: lastError
+        ), quitTarget: self, quitAction: #selector(quitFromMenu))
     }
 
     @objc private func quitFromMenu() {
         isQuittingFromMenu = true
         NSApp.terminate(nil)
     }
+}
+
+// 2026-10-14: shared menu construction keeps the sample preview consistent
+// with the running app without invoking power-management side effects.
+struct MenuState {
+    let isOn: Bool
+    let onSince: Date?
+    let caffeinateRunning: Bool
+    let lastError: String?
+}
+
+func buildMenuItems(into menu: NSMenu, state: MenuState, quitTarget: AnyObject? = nil, quitAction: Selector? = nil) {
+    menu.removeAllItems()
+    addMenuLabel("Stay Awake", to: menu, font: .systemFont(ofSize: 12.5, weight: .semibold), color: .labelColor)
+    if state.isOn {
+        let age = state.onSince.map { " for \(ageText(Int(Date().timeIntervalSince($0))))" } ?? ""
+        let caffeinateState = state.caffeinateRunning ? "running" : "NOT running"
+        addMenuLabel("On\(age) · sleep disabled · caffeinate \(caffeinateState) · lock held off",
+                     to: menu, font: .systemFont(ofSize: 11.5), color: .systemBlue)
+        addMenuLabel("Click the cup to allow sleep again", to: menu,
+                     font: .systemFont(ofSize: 11.5), color: .secondaryLabelColor)
+    } else {
+        addMenuLabel("Off · sleeping and locking normally", to: menu,
+                     font: .systemFont(ofSize: 11.5), color: .secondaryLabelColor)
+        addMenuLabel("Click the cup to stay awake through lid, KVM and idle", to: menu,
+                     font: .systemFont(ofSize: 11.5), color: .secondaryLabelColor)
+    }
+    if let error = state.lastError {
+        addMenuLabel(error, to: menu, font: .systemFont(ofSize: 11.5), color: .systemOrange)
+    }
+    menu.addItem(.separator())
+    let quit = NSMenuItem(title: "Quit Stay Awake", action: quitAction, keyEquivalent: "q")
+    quit.target = quitTarget
+    menu.addItem(quit)
+}
+
+// Disabled items are menu text, not commands. The action item stays enabled.
+func addMenuLabel(_ text: String, to menu: NSMenu, font: NSFont, color: NSColor) {
+    let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
+    item.isEnabled = false
+    item.attributedTitle = NSAttributedString(string: text, attributes: [
+        .font: font,
+        .foregroundColor: color,
+    ])
+    menu.addItem(item)
 }
 
 // MARK: - Helpers that hold no state
@@ -315,6 +334,64 @@ func ageText(_ seconds: Int) -> String {
     if seconds < 3600 { return "\(seconds / 60)m" }
     if seconds < 86400 { return String(format: "%.1fh", Double(seconds) / 3600) }
     return "\(seconds / 86400)d"
+}
+
+// This renders the live menu's NSMenuItem content with fixed sample state. It
+// stays above NSApplication setup so the preview cannot affect pmset,
+// caffeinate, timers, or a LaunchAgent.
+func renderScreenshotFixture(to path: String) throws {
+    let size = NSSize(width: 640, height: 270)
+    let image = NSImage(size: size)
+    NSAppearance(named: .darkAqua)?.performAsCurrentDrawingAppearance {
+    image.lockFocus()
+    NSColor(srgbRed: 0.11, green: 0.11, blue: 0.12, alpha: 1).setFill()
+    NSRect(origin: .zero, size: size).fill()
+    let menuRect = NSRect(x: 24, y: 22, width: 592, height: 190)
+    NSColor(srgbRed: 0.17, green: 0.17, blue: 0.19, alpha: 1).setFill()
+    NSBezierPath(roundedRect: menuRect, xRadius: 14, yRadius: 14).fill()
+    let caption = NSAttributedString(string: "Sample menu content preview", attributes: [
+        .font: NSFont.systemFont(ofSize: 15, weight: .medium),
+        .foregroundColor: NSColor.secondaryLabelColor,
+    ])
+    caption.draw(at: NSPoint(x: menuRect.minX, y: 240))
+    let menu = NSMenu()
+    buildMenuItems(into: menu, state: MenuState(
+        isOn: true,
+        onSince: Date().addingTimeInterval(-42 * 60),
+        caffeinateRunning: true,
+        lastError: nil
+    ))
+    var y = menuRect.maxY - 34
+    for item in menu.items {
+        if item.isSeparatorItem {
+            NSColor.separatorColor.setFill()
+            NSRect(x: menuRect.minX + 26, y: y + 8, width: menuRect.width - 52, height: 1).fill()
+            y -= 32
+            continue
+        }
+        let title = item.attributedTitle ?? NSAttributedString(string: item.title, attributes: [
+            .font: NSFont.menuFont(ofSize: 13), .foregroundColor: NSColor.labelColor,
+        ])
+        title.draw(in: NSRect(x: menuRect.minX + 34, y: y, width: menuRect.width - 68, height: 28))
+        y -= 28
+    }
+    image.unlockFocus()
+    }
+    guard let data = image.tiffRepresentation,
+          let png = NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:]) else {
+        throw NSError(domain: "StayAwake", code: 1, userInfo: [NSLocalizedDescriptionKey: "could not encode fixture"])
+    }
+    try png.write(to: URL(fileURLWithPath: path))
+}
+
+if let fixtureIndex = CommandLine.arguments.firstIndex(of: "--screenshot-fixture") {
+    guard CommandLine.arguments.indices.contains(fixtureIndex + 1) else {
+        FileHandle.standardError.write(Data("--screenshot-fixture needs an output path\n".utf8))
+        exit(2)
+    }
+    do { try renderScreenshotFixture(to: CommandLine.arguments[fixtureIndex + 1]) }
+    catch { FileHandle.standardError.write(Data("screenshot fixture failed: \(error)\n".utf8)); exit(1) }
+    exit(0)
 }
 
 // NSApplication holds its delegate weakly, so this global is what keeps it

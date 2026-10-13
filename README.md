@@ -1,10 +1,32 @@
 # Stay Awake
 
+```text
+                   ( ( (
+                    ) ) )
+                 .--------.
+                /          \____
+               |  stay      ____)
+               |  awake!   |
+               |           |
+                \         /
+                 '-------'
+                ===========
+           deliberate awake time
+```
+
 <p align="center"><img src="docs/images/menu.png" width="600" alt="A clearly labelled sample menu-content preview showing that sleep is disabled and caffeinate is running."></p>
 
 Stay Awake is a small macOS menu-bar app that keeps a Mac awake during long-running local work. Click the cup to turn it on; click it again to restore normal sleep and lock behaviour.
 
 It supports macOS 13 and later and has no network access, analytics, or bundled dependencies.
+
+```mermaid
+flowchart LR
+  Cup[Menu-bar cup] --> App[Stay Awake]
+  App --> PMSet[pmset SleepDisabled]
+  App --> Caffeinate[caffeinate bound to app PID]
+  App --> Activity[IOKit user-activity assertion]
+```
 
 ## Install
 
@@ -70,7 +92,7 @@ APP_DIR="$scratch" bash build.sh --force
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) for local checks, scope, and security reporting. Bug reports and feature proposals use the issue templates; pull requests use the checklist in the pull request template.
 
-The previous detailed build and implementation notes are preserved in [docs/REFERENCE.md](docs/REFERENCE.md).
+The previous detailed build and implementation notes are preserved in [docs/REFERENCE.md](docs/REFERENCE.md). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the component map and power-management boundaries.
 
 ## Licence
 

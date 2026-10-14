@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shell syntax
+        run: for script in build.sh install.sh; do bash -n "$script"; done
+      - name: Run ShellCheck
+        run: brew install shellcheck && shellcheck -S warning -x build.sh install.sh
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build in a scratch directory
+        run: APP_DIR="$RUNNER_TEMP/stay-awake" bash build.sh --force
+      - name: Render the documentation fixture without side effects
+        run: >-
+          "$RUNNER_TEMP/stay-awake/Stay Awake.app/Contents/MacOS/StayAwake"
+          --screenshot-fixture "$RUNNER_TEMP/menu.png"

@@ -81,9 +81,11 @@ a gap the next covers, and turning it off undoes all three:
 
 1. `pmset -a disablesleep 1`. The only setting that stops a Mac sleeping when
    its lid is closed and no display is attached.
-2. `caffeinate -dimsu -w <the app's pid>`. Prevents idle, display, disk and
+2. `caffeinate -dims -w <the app's pid>`. Prevents idle, display, disk and
    system sleep. `-w` ties it to the app's process, so it can never outlive
-   the app as an orphan.
+   the app as an orphan. There is no `-u`: with it, `caffeinate` released the
+   disk assertion with `-u`'s own after a few seconds (measured on macOS
+   27.2), and step 3 already declares the user active.
 3. `IOPMAssertionDeclareUserActivity`, every 60 seconds. `caffeinate` keeps
    the display awake, but the screen saver and the login-window lock run on
    macOS's idle timer, which only real user activity resets. This is what

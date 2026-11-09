@@ -9,7 +9,7 @@ next poll.
 flowchart LR
   Menu[Status-bar cup and menu] --> Delegate[AppDelegate]
   Delegate <--> PMSet[pmset SleepDisabled]
-  Delegate --> Caf[caffeinate -dimsu -w app PID]
+  Delegate --> Caf[caffeinate -dims -w app PID]
   Delegate --> IOKit[User activity assertion every minute]
   Install[install.sh] --> Agent[Per-user LaunchAgent]
   Agent --> Delegate

@@ -62,7 +62,7 @@ Uninstall clears `pmset`'s `SleepDisabled` value if it is set, removes the app a
 Stay Awake combines three local mechanisms:
 
 1. `pmset -a disablesleep 1` prevents clamshell sleep. This is a persistent system-wide setting and requires administrator authorization.
-2. `caffeinate -dimsu -w <app-pid>` prevents idle, display, disk, and system sleep while the app runs.
+2. `caffeinate -dims -w <app-pid>` prevents idle, display, disk, and system sleep while the app runs.
 3. An IOKit user-activity assertion is refreshed every minute to keep the idle lock timer from firing.
 
 The app reads `pmset` regularly and uses that value as its displayed state. Turning it off, quitting through its menu, uninstalling it, or running `sudo pmset -a disablesleep 0` restores normal sleep behaviour. Treat the app as a local power-management tool: it deliberately keeps the session unlocked while it is on.

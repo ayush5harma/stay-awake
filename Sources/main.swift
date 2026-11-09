@@ -6,9 +6,13 @@
 //   • `pmset -a disablesleep 1` is the only setting that stops clamshell
 //     sleep, the sleep a Mac enters when its lid closes with no display
 //     attached. It needs root: see setSleepDisabled.
-//   • `caffeinate -dimsu -w <our pid>` holds off idle, display, disk and
+//   • `caffeinate -dims -w <our pid>` holds off idle, display, disk and
 //     system sleep. -w ties it to this process, so a relaunch (KeepAlive, a
-//     rebuild) can never leave an orphan behind.
+//     rebuild) can never leave an orphan behind. No -u: measured on macOS
+//     27.2, `-dimsu` dropped its PreventDiskIdle assertion along with -u's
+//     UserIsActive within 12 s (-u defaults to a 5 s timeout, which the disk
+//     assertion evidently shares), so disk sleep was never held off; `-dims`
+//     kept all four for the whole run. The timer below already does -u's job.
 //   • IOPMAssertionDeclareUserActivity every 60 s. caffeinate keeps the
 //     DISPLAY awake, but the screen saver and the lock screen run on the idle
 //     timer, which only user activity resets. This is the unlocked half.
@@ -120,7 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startCaffeinate() {
         guard caffeinateProcess == nil else { return }
         let caffeinate = makeProcess("/usr/bin/caffeinate",
-                                     ["-dimsu", "-w", String(ProcessInfo.processInfo.processIdentifier)])
+                                     ["-dims", "-w", String(ProcessInfo.processInfo.processIdentifier)])
         // If caffeinate dies on its own, forget it; the next poll starts a new one.
         caffeinate.terminationHandler = { [weak self] _ in
             DispatchQueue.main.async { self?.caffeinateProcess = nil }
